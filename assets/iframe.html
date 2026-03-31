@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/combine/npm/@zendeskgarden/css-bedrock@2.0.5" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; color: #2f3941; padding: 8px; }
+    .spinner { display: flex; justify-content: center; padding: 32px 0; }
+    .spinner::after { content: ""; width: 24px; height: 24px; border: 3px solid #e9ebed; border-top-color: #9c5758; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { color: #cc3340; padding: 12px; background: #fff0f1; border-radius: 4px; }
+    .empty { color: #68737d; padding: 16px; text-align: center; }
+    .return-card { border: 1px solid #e9ebed; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
+    .return-header { background: #f8f9f9; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .return-header:hover { background: #e9ebed; }
+    .return-rma { font-weight: 600; color: #9c5758; }
+    .return-stage { font-size: 11px; padding: 2px 6px; border-radius: 10px; background: #e9ebed; color: #49545c; }
+    .return-body { padding: 10px 12px; display: none; }
+    .return-body.open { display: block; }
+    .meta-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
+    .meta-label { color: #68737d; }
+    .meta-value { color: #2f3941; }
+    .meta-value a { color: #9c5758; text-decoration: none; }
+    .meta-value a:hover { text-decoration: underline; }
+    .items-header { font-weight: 600; font-size: 12px; margin-top: 8px; margin-bottom: 4px; }
+    .item-row { padding: 4px 0; border-top: 1px solid #f3f4f5; font-size: 12px; }
+    .item-name { font-weight: 500; }
+    .item-detail { color: #68737d; font-size: 11px; }
+    .exchange-info { color: #9c5758; font-size: 11px; }
+    .refresh-time { font-size: 11px; color: #87929d; text-align: right; padding-top: 6px; }
+    .app-link { text-align: center; padding: 8px 0; }
+    .app-link a { color: #9c5758; font-size: 12px; text-decoration: none; }
+    .app-link a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div id="app"><div class="spinner"></div></div>
+
+  <script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"></script>
+  <script>
+    (function () {
+      var API_HOST = '__API_HOST__';
+      var SECURE_MODE = __SECURE__;
+      var client = ZAFClient.init();
+
+      client.on('app.activated', function () {
+        resize();
+      });
+
+      function resize() {
+        var height = Math.max(document.body.scrollHeight, 100);
+        client.invoke('resize', { width: '100%', height: height + 'px' });
+      }
+
+      function clearApp() {
+        var app = document.getElementById('app');
+        while (app.firstChild) { app.removeChild(app.firstChild); }
+        return app;
+      }
+
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        if (attrs) {
+          Object.keys(attrs).forEach(function (k) {
+            if (k === 'textContent') { node.textContent = attrs[k]; }
+            else if (k === 'className') { node.className = attrs[k]; }
+            else if (k === 'onclick') { node.onclick = attrs[k]; }
+            else { node.setAttribute(k, attrs[k]); }
+          });
+        }
+        if (children) {
+          children.forEach(function (c) { if (c) node.appendChild(c); });
+        }
+        return node;
+      }
+
+      function isSafeUrl(url) {
+        if (!url) return false;
+        var lower = url.toLowerCase().trim();
+        return lower.startsWith('https://') || lower.startsWith('http://');
+      }
+
+      function renderError(message) {
+        var app = clearApp();
+        app.appendChild(el('div', { className: 'error', textContent: message }));
+        resize();
+      }
+
+      function renderEmpty() {
+        var app = clearApp();
+        app.appendChild(el('div', { className: 'empty', textContent: 'No returns found for this customer.' }));
+        resize();
+      }
+
+      function renderReturns(data, email) {
+        var app = clearApp();
+
+        if (!data.returns || data.returns.length === 0) {
+          renderEmpty();
+          return;
+        }
+
+        data.returns.forEach(function (ret, idx) {
+          var body = el('div', { className: 'return-body' + (idx === 0 ? ' open' : '') });
+
+          var metaFields = [
+            ['Order', ret.order_name],
+            ['Order date', ret.order_date ? new Date(ret.order_date).toLocaleDateString() : ''],
+            ['Return date', ret.return_date ? new Date(ret.return_date).toLocaleDateString() : ''],
+            ['Status', ret.resolved_status],
+            ['Shipping', ret.shipping_method],
+            ['Delivery', ret.delivery_status],
+          ];
+
+          metaFields.forEach(function (pair) {
+            if (pair[1]) {
+              body.appendChild(el('div', { className: 'meta-row' }, [
+                el('span', { className: 'meta-label', textContent: pair[0] }),
+                el('span', { className: 'meta-value', textContent: pair[1] }),
+              ]));
+            }
+          });
+
+          if (ret.tracking_number) {
+            var trackingValue = el('span', { className: 'meta-value' });
+            if (ret.tracking_url && isSafeUrl(ret.tracking_url)) {
+              var trackingLink = el('a', { textContent: ret.tracking_number });
+              trackingLink.setAttribute('href', ret.tracking_url);
+              trackingLink.setAttribute('target', '_blank');
+              trackingLink.setAttribute('rel', 'noopener noreferrer');
+              trackingValue.appendChild(trackingLink);
+            } else {
+              trackingValue.textContent = ret.tracking_number;
+            }
+            body.appendChild(el('div', { className: 'meta-row' }, [
+              el('span', { className: 'meta-label', textContent: 'Tracking' }),
+              trackingValue,
+            ]));
+          }
+
+          if (ret.return_link && isSafeUrl(ret.return_link)) {
+            var returnLink = el('a', { textContent: 'View return' });
+            returnLink.setAttribute('href', ret.return_link);
+            returnLink.setAttribute('target', '_blank');
+            returnLink.setAttribute('rel', 'noopener noreferrer');
+            var linkValue = el('span', { className: 'meta-value' });
+            linkValue.appendChild(returnLink);
+            body.appendChild(el('div', { className: 'meta-row' }, [
+              el('span', { className: 'meta-label', textContent: 'Return' }),
+              linkValue,
+            ]));
+          }
+
+          if (ret.items && ret.items.length > 0) {
+            body.appendChild(el('div', { className: 'items-header', textContent: 'Items' }));
+            ret.items.forEach(function (item) {
+              var itemRow = el('div', { className: 'item-row' });
+              var qty = item.quantity > 1 ? item.quantity + 'x ' : '';
+              itemRow.appendChild(el('div', { className: 'item-name', textContent: qty + item.variant_display_name }));
+
+              var details = [];
+              if (item.return_type) details.push(item.return_type);
+              if (item.return_reason) details.push(item.return_reason);
+              if (item.value) details.push(item.value);
+              if (details.length > 0) {
+                itemRow.appendChild(el('div', { className: 'item-detail', textContent: details.join(' \u00b7 ') }));
+              }
+
+              if (item.exchange_title) {
+                itemRow.appendChild(el('div', { className: 'exchange-info', textContent: 'Exchange: ' + item.exchange_title + (item.exchange_value ? ' (' + item.exchange_value + ')' : '') }));
+              }
+
+              if (item.return_comments) {
+                itemRow.appendChild(el('div', { className: 'item-detail', textContent: 'Comment: ' + item.return_comments }));
+              }
+
+              body.appendChild(itemRow);
+            });
+          }
+
+          var stageEl = el('span', { className: 'return-stage', textContent: ret.stage });
+          var rmaEl = el('span', { className: 'return-rma', textContent: ret.rma });
+          var header = el('div', { className: 'return-header', onclick: function () {
+            body.classList.toggle('open');
+            resize();
+          } }, [rmaEl, stageEl]);
+
+          var card = el('div', { className: 'return-card' }, [header, body]);
+          app.appendChild(card);
+        });
+
+        if (data.shopify_app_url) {
+          var startLink = el('a', { textContent: 'Start return' });
+          startLink.setAttribute('href', data.shopify_app_url + 'returns/create?q=' + encodeURIComponent(email));
+          startLink.setAttribute('target', '_blank');
+          startLink.setAttribute('rel', 'noopener noreferrer');
+
+          var openLink = el('a', { textContent: 'Open ReturnZap' });
+          openLink.setAttribute('href', data.shopify_app_url);
+          openLink.setAttribute('target', '_blank');
+          openLink.setAttribute('rel', 'noopener noreferrer');
+
+          var separator = el('span', { textContent: ' · ', className: 'meta-label' });
+          app.appendChild(el('div', { className: 'app-link' }, [startLink, separator, openLink]));
+        }
+
+        if (data.last_refreshed) {
+          var refreshTime = new Date(data.last_refreshed).toLocaleTimeString();
+          app.appendChild(el('div', { className: 'refresh-time', textContent: 'Updated ' + refreshTime }));
+        }
+
+        resize();
+      }
+
+      function fetchContext(email) {
+        var contextUrl = 'https://' + API_HOST + '/partners/zendesk/ticket-context?customer_email=' + encodeURIComponent(email);
+        if (SECURE_MODE) {
+          return client.request({
+            url: contextUrl,
+            type: 'GET',
+            headers: { 'X-Authorization': '{{setting.api_token}}' },
+            secure: true,
+            contentType: 'application/json',
+          });
+        }
+        return client.metadata().then(function (meta) {
+          return client.request({
+            url: contextUrl,
+            type: 'GET',
+            headers: { 'X-Authorization': meta.settings.api_token },
+            contentType: 'application/json',
+          });
+        });
+      }
+
+      client.get('ticket.requester.email').then(function (data) {
+        var email = data['ticket.requester.email'];
+        if (!email) {
+          renderError('No requester email found on this ticket.');
+          return;
+        }
+
+        fetchContext(email).then(function (response) {
+          if (response.error) {
+            renderError(response.error);
+          } else {
+            renderReturns(response, email);
+          }
+        }).catch(function (err) {
+          console.error('ReturnZap: failed to fetch context', err);
+          if (err && err.status === 401) {
+            renderError('Invalid API token. Please check your ReturnZap Zendesk settings.');
+          } else if (err && err.status === 403) {
+            renderError('The Zendesk feature is not enabled on your current ReturnZap plan.');
+          } else {
+            renderError('Failed to load return data. Please try again later.');
+          }
+        });
+      }).catch(function (err) {
+        console.error('ReturnZap: could not read ticket info', err);
+        renderError('Could not read ticket information.');
+      });
+    })();
+  </script>
+</body>
+</html>

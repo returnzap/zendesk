@@ -1,0 +1,14 @@
+{
+  "app": {
+    "name": "ReturnZap",
+    "short_description": "View customer return details from ReturnZap inside Zendesk tickets.",
+    "long_description": "ReturnZap helps e-commerce merchants manage product returns. This app displays a customer's recent returns — including stage, shipping, tracking, items, and exchange information — in the Zendesk Support ticket sidebar, so agents have full context without switching tools.",
+    "installation_instructions": "1. In ReturnZap HQ, go to Settings → Integrations → Zendesk and click Connect.\n2. Copy the API token shown.\n3. Paste the token below when prompted."
+  },
+  "parameters": {
+    "api_token": {
+      "label": "ReturnZap API Token",
+      "helpText": "Find this in ReturnZap → Settings → Integrations → Zendesk."
+    }
+  }
+}
